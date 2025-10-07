@@ -4,10 +4,10 @@
       📊 Estadísticas de Colecciones
     </h2>
 
-    <!-- Filtro por colección -->
+    <!-- Filtro -->
     <div class="flex items-center gap-4 mb-4">
       <select v-model="selectedColeccion" class="border rounded p-2">
-        <option :value="null">Todas las colecciones</option>
+        <option value="">Todas las colecciones</option>
         <option v-for="c in colecciones" :key="c.id" :value="c.id">
           {{ c.nombre }}
         </option>
@@ -17,41 +17,41 @@
       </button>
     </div>
 
-    <!-- Tabla de estadísticas -->
+    <!-- Tabla -->
     <table class="min-w-full border border-gray-300">
       <thead>
         <tr class="bg-gray-100">
-          <th class="border px-4 py-2">Tipo Colección</th>
+          <th class="border px-4 py-2">Colección</th>
           <th class="border px-4 py-2">Total Vistas</th>
           <th class="border px-4 py-2">Último Registro</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="item in estadisticas" :key="item.tipo_colleccion_id">
-          <td class="border px-4 py-2">{{ item.coleccion ? item.coleccion.nombre : 'Sin nombre' }}</td>
-          <td class="border px-4 py-2">{{ item.total_vistas }}</td>
-          <td class="border px-4 py-2">{{ formatDate(item.ultimo_registro) }}</td>
+        <tr v-for="item in estadisticas.data" :key="item.tipo_colleccion_id">
+          <td>
+            {{ item.coleccion?.nombre || 'ID: ' + item.tipo_colleccion_id }}
+          </td>
+          <td>{{ item.total_vistas }}</td>
+          <td>{{ formatDate(item.ultimo_registro) }}</td>
         </tr>
       </tbody>
     </table>
 
-    <!-- Paginación simple -->
-    <div class="mt-4 flex gap-2">
-      <button 
-        @click="cambiarPagina(page - 1)" 
-        :disabled="page <= 1"
-        class="px-3 py-1 bg-gray-300 rounded"
-      >Anterior</button>
-      <span>Página {{ page }}</span>
-      <button 
-        @click="cambiarPagina(page + 1)" 
-        :disabled="page >= lastPage"
-        class="px-3 py-1 bg-gray-300 rounded"
-      >Siguiente</button>
+    <!-- Paginación -->
+    <div class="mt-4 flex gap-2 items-center">
+      <button @click="cambiarPagina(page - 1)" :disabled="page <= 1"
+              class="px-3 py-1 bg-gray-300 rounded disabled:opacity-50">
+        Anterior
+      </button>
+      <span>Página {{ page }} de {{ lastPage }}</span>
+      <button @click="cambiarPagina(page + 1)" :disabled="page >= lastPage"
+              class="px-3 py-1 bg-gray-300 rounded disabled:opacity-50">
+        Siguiente
+      </button>
     </div>
 
-    <!-- Mensaje de error -->
-    <div v-if="errorMsg" class="mt-4 text-red-500">
+    <!-- Error -->
+    <div v-if="errorMsg" class="mt-4 text-red-500 font-medium p-2 border border-red-500 bg-red-50">
       {{ errorMsg }}
     </div>
   </div>
@@ -63,38 +63,71 @@ import axios from 'axios';
 
 // Variables reactivas
 const colecciones = ref([]);
-const selectedColeccion = ref(null);
-const estadisticas = ref([]);
+const selectedColeccion = ref('');
+const estadisticas = ref({ data: [] });
 const page = ref(1);
 const numero_items = ref(10);
 const lastPage = ref(1);
 const errorMsg = ref('');
 
-// Cargar colecciones para el filtro
+// Reiniciar estadísticas
+const resetStats = () => {
+  estadisticas.value = { data: [] };
+  lastPage.value = 1;
+};
+
+// Cargar colecciones
 async function cargarColecciones() {
   try {
     const res = await axios.get('http://127.0.0.1:8000/api/tipocollecciones');
-    colecciones.value = res.data.data || [];
+    colecciones.value = res.data.obj || []; 
+    console.log("Colecciones recibidas:", colecciones.value);
   } catch (error) {
     console.error("Error al cargar colecciones:", error);
-    errorMsg.value = "No se pudieron cargar las colecciones.";
   }
 }
 
-// Función para cargar estadísticas
+// Cargar estadísticas
 async function cargarEstadisticas() {
   try {
     errorMsg.value = '';
+
+    // Convertir ID a entero o null
+    const filterId = selectedColeccion.value ? parseInt(selectedColeccion.value) : null;
+
     const res = await axios.post('http://127.0.0.1:8000/api/vistas/listar', {
-      tipo_colleccion_id: selectedColeccion.value ? parseInt(selectedColeccion.value) : null,
+      tipo_colleccion_id: filterId,
       page: page.value,
       numero_items: numero_items.value
     });
-    estadisticas.value = res.data.data || [];
-    lastPage.value = res.data.last_page || 1;
+
+    if (res.data.state !== 202) {
+      errorMsg.value = res.data.msg?.[0] || "Error al cargar estadísticas: Estado no exitoso.";
+      resetStats();
+      return;
+    }
+
+    estadisticas.value = res.data.obj || { data: [] };
+    page.value = estadisticas.value.current_page || 1;
+    lastPage.value = estadisticas.value.last_page || 1;
+
+    console.log("Estadísticas recibidas:", estadisticas.value);
+
   } catch (error) {
     console.error("Error al cargar estadísticas:", error);
-    errorMsg.value = "No se pudieron cargar las estadísticas.";
+
+    const backendData = error.response?.data;
+    const statusCode = error.response?.status;
+
+    if (backendData?.msg) {
+      errorMsg.value = `(${statusCode}) ${backendData.msg[0] || "Error en la respuesta del servidor."}`;
+    } else if (statusCode) {
+      errorMsg.value = `Error de red o servidor: ${statusCode} ${error.message}`;
+    } else {
+      errorMsg.value = "Error de conexión o configuración al cargar las estadísticas.";
+    }
+
+    resetStats();
   }
 }
 
@@ -113,7 +146,7 @@ function formatDate(dateStr) {
   return d.toLocaleString();
 }
 
-// Ejecutar al montar
+// Al montar
 onMounted(async () => {
   await cargarColecciones();
   await cargarEstadisticas();
@@ -121,10 +154,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-table {
-  border-collapse: collapse;
-}
-th, td {
-  text-align: left;
-}
+table { border-collapse: collapse; }
+th, td { text-align: left; }
 </style>
