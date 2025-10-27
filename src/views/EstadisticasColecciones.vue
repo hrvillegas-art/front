@@ -1,159 +1,92 @@
 <template>
-  <div class="p-6">
-    <h2 class="text-2xl font-bold mb-6 text-gray-800">
-      📊 Estadísticas de Colecciones
-    </h2>
+  <div class="p-6 md:p-8 bg-gray-100 min-h-screen">
 
-    <!-- Filtro -->
-    <div class="flex items-center gap-4 mb-4">
-      <select v-model="selectedColeccion" class="border rounded p-2">
-        <option value="">Todas las colecciones</option>
-        <option v-for="c in colecciones" :key="c.id" :value="c.id">
-          {{ c.nombre }}
-        </option>
-      </select>
-      <button @click="cargarEstadisticas" class="bg-blue-500 text-white px-4 py-2 rounded">
-        Filtrar
-      </button>
-    </div>
-
-    <!-- Tabla -->
-    <table class="min-w-full border border-gray-300">
-      <thead>
-        <tr class="bg-gray-100">
-          <th class="border px-4 py-2">Colección</th>
-          <th class="border px-4 py-2">Total Vistas</th>
-          <th class="border px-4 py-2">Último Registro</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="item in estadisticas.data" :key="item.tipo_colleccion_id">
-          <td>
-            {{ item.coleccion?.nombre || 'ID: ' + item.tipo_colleccion_id }}
-          </td>
-          <td>{{ item.total_vistas }}</td>
-          <td>{{ formatDate(item.ultimo_registro) }}</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <!-- Paginación -->
-    <div class="mt-4 flex gap-2 items-center">
-      <button @click="cambiarPagina(page - 1)" :disabled="page <= 1"
-              class="px-3 py-1 bg-gray-300 rounded disabled:opacity-50">
-        Anterior
-      </button>
-      <span>Página {{ page }} de {{ lastPage }}</span>
-      <button @click="cambiarPagina(page + 1)" :disabled="page >= lastPage"
-              class="px-3 py-1 bg-gray-300 rounded disabled:opacity-50">
-        Siguiente
-      </button>
+    <!-- Loading -->
+    <div v-if="loading" class="text-center py-20 bg-white rounded-xl shadow-lg">
+      <p class="text-2xl text-blue-600 font-semibold">Cargando estadísticas...</p>
     </div>
 
     <!-- Error -->
-    <div v-if="errorMsg" class="mt-4 text-red-500 font-medium p-2 border border-red-500 bg-red-50">
-      {{ errorMsg }}
+    <div v-else-if="error" class="text-center py-20 bg-red-50 border border-red-300 rounded-xl shadow-lg max-w-2xl mx-auto">
+      <h2 class="text-2xl text-red-700 font-bold mb-2">Error 😔</h2>
+      <p class="text-gray-600">{{ error }}</p>
+    </div>
+
+    <!-- Estadísticas -->
+    <div v-else class="bg-white p-6 rounded-xl shadow-2xl border-t-4 border-blue-600 max-w-7xl mx-auto">
+      <h1 class="text-3xl font-extrabold text-gray-900 mb-6">📊 Estadísticas de Piezas por Colección</h1>
+
+      <div v-for="coleccion in colecciones" :key="coleccion.id" class="mb-8">
+        <h2 class="text-xl font-semibold text-gray-800 mb-2">{{ coleccion.coleccion }}</h2>
+
+        <table class="min-w-full bg-white border rounded-lg shadow-md">
+          <thead>
+            <tr class="bg-blue-100 text-left">
+              <th class="px-4 py-2">ID</th>
+              <th class="px-4 py-2">Nombre / Especie</th>
+              <th class="px-4 py-2">Vistas</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="pieza in coleccion.piezas" :key="pieza.id" class="border-b hover:bg-gray-50">
+              <td class="px-4 py-2">{{ pieza.id }}</td>
+              <!-- Mostrar solo especie o genero, y si no existe mostrar "Sin nombre" -->
+              <td class="px-4 py-2">{{ pieza.nombre || 'Sin nombre' }}</td>
+              <td class="px-4 py-2">{{ pieza.vistas }}</td>
+            </tr>
+            <tr v-if="coleccion.piezas.length === 0" class="border-b bg-gray-50">
+              <td colspan="3" class="px-4 py-2 text-center">No hay piezas en esta colección</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
-import axios from 'axios';
+import { ref, onMounted } from 'vue'
+import axios from 'axios'
 
-// Variables reactivas
-const colecciones = ref([]);
-const selectedColeccion = ref('');
-const estadisticas = ref({ data: [] });
-const page = ref(1);
-const numero_items = ref(10);
-const lastPage = ref(1);
-const errorMsg = ref('');
+const API_BASE_URL = 'http://127.0.0.1:8000/api'
 
-// Reiniciar estadísticas
-const resetStats = () => {
-  estadisticas.value = { data: [] };
-  lastPage.value = 1;
-};
+const colecciones = ref([])
+const loading = ref(true)
+const error = ref(null)
 
-// Cargar colecciones
-async function cargarColecciones() {
+const fetchColeccionesConPiezas = async () => {
+  loading.value = true
+  error.value = null
   try {
-    const res = await axios.get('http://127.0.0.1:8000/api/tipocollecciones');
-    colecciones.value = res.data.obj || []; 
-    console.log("Colecciones recibidas:", colecciones.value);
-  } catch (error) {
-    console.error("Error al cargar colecciones:", error);
+    const res = await axios.get(`${API_BASE_URL}/colecciones-con-piezas`)
+
+    // Mapear los datos para mostrar solo especie/genero y vistas
+    colecciones.value = res.data.map(coleccion => ({
+      id: coleccion.id,
+      coleccion: coleccion.coleccion,
+      piezas: coleccion.piezas.map(pieza => ({
+        id: pieza.id,
+        nombre: pieza.nombre,  // Aquí ya viene solo especie o genero desde backend
+        vistas: pieza.vistas
+      }))
+    }))
+
+  } catch (err) {
+    console.error(err)
+    error.value = 'No se pudo cargar la información de las colecciones y piezas.'
+  } finally {
+    loading.value = false
   }
 }
 
-// Cargar estadísticas
-async function cargarEstadisticas() {
-  try {
-    errorMsg.value = '';
-
-    // Convertir ID a entero o null
-    const filterId = selectedColeccion.value ? parseInt(selectedColeccion.value) : null;
-
-    const res = await axios.post('http://127.0.0.1:8000/api/vistas/listar', {
-      tipo_colleccion_id: filterId,
-      page: page.value,
-      numero_items: numero_items.value
-    });
-
-    if (res.data.state !== 202) {
-      errorMsg.value = res.data.msg?.[0] || "Error al cargar estadísticas: Estado no exitoso.";
-      resetStats();
-      return;
-    }
-
-    estadisticas.value = res.data.obj || { data: [] };
-    page.value = estadisticas.value.current_page || 1;
-    lastPage.value = estadisticas.value.last_page || 1;
-
-    console.log("Estadísticas recibidas:", estadisticas.value);
-
-  } catch (error) {
-    console.error("Error al cargar estadísticas:", error);
-
-    const backendData = error.response?.data;
-    const statusCode = error.response?.status;
-
-    if (backendData?.msg) {
-      errorMsg.value = `(${statusCode}) ${backendData.msg[0] || "Error en la respuesta del servidor."}`;
-    } else if (statusCode) {
-      errorMsg.value = `Error de red o servidor: ${statusCode} ${error.message}`;
-    } else {
-      errorMsg.value = "Error de conexión o configuración al cargar las estadísticas.";
-    }
-
-    resetStats();
-  }
-}
-
-// Cambiar página
-function cambiarPagina(p) {
-  if (p >= 1 && p <= lastPage.value) {
-    page.value = p;
-    cargarEstadisticas();
-  }
-}
-
-// Formatear fecha
-function formatDate(dateStr) {
-  if (!dateStr) return '-';
-  const d = new Date(dateStr);
-  return d.toLocaleString();
-}
-
-// Al montar
-onMounted(async () => {
-  await cargarColecciones();
-  await cargarEstadisticas();
-});
+onMounted(() => {
+  fetchColeccionesConPiezas()
+})
 </script>
 
 <style scoped>
-table { border-collapse: collapse; }
-th, td { text-align: left; }
+table th, table td {
+  border: 1px solid #ddd;
+}
 </style>

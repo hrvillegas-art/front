@@ -144,7 +144,7 @@ async function deleteSelectedProducts() {
                 :filters="filters"
                 dataKey="id"
                 paginator
-                rows="10"
+                :rows="10"
                 :rowsPerPageOptions="[5, 10, 25]"
                 :globalFilterFields="['nombre', 'descripcion', 'tipocolleccion_id']"
                 responsiveLayout="scroll"
