@@ -41,7 +41,7 @@ async function Login() {
         const outserver = response.data;
 
         if (outserver.state === 202) {
-            localStorage.clear();
+            localStorage.clear(); // Limpia cualquier token viejo
             if (outserver.token) {
                 // Guarda el token si tu API lo retorna (aunque la autenticación se hará por cookie)
                 localStorage.setItem("token", outserver.token);
